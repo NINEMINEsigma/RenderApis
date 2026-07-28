@@ -82,7 +82,7 @@ struct D3D11InitParams
   uint32_t VendorUAV = ~0U;
 
   // check if a frame capture section version is supported
-  static const uint64_t CurrentVersion = 0x14;
+  static const uint64_t CurrentVersion = 0x13;
   static bool IsSupportedVersion(uint64_t ver);
 };
 
