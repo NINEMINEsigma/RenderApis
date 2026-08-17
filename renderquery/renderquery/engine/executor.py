@@ -272,7 +272,20 @@ class Executor:
     # ------------------------------------------------------------------
 
     def _render_screenshot(self, params: dict, event_id: int, out_path: str) -> str:
-        """Capture the current output target (or specified texture) as an image."""
+        """Capture the current output target (or specified texture) as an image.
+
+        When ``params["overlay"]`` is set (and no explicit ``texture_id``),
+        routes to :meth:`_render_overlay_screenshot` which uses
+        ``ReplayOutputType.Texture`` + ``TextureDisplay.overlay`` (e.g.
+        ``DebugOverlay.Drawcall``) to produce the GUI-style "Highlight Drawcall"
+        combined image.
+        """
+        # Overlay path: only meaningful for the current drawcall's color target.
+        overlay = params.get("overlay")
+        tex_id = params.get("texture_id")
+        if overlay and not tex_id:
+            return self._render_overlay_screenshot(params, event_id, out_path)
+
         ctrl = self._catalog.controller
         filetype_map = {
             "png": rd.FileType.PNG,
@@ -283,7 +296,6 @@ class Executor:
         ftype = filetype_map.get(params.get("filetype", "png"), rd.FileType.PNG)
 
         # Determine the texture to capture
-        tex_id = params.get("texture_id")
         if tex_id:
             rid = _str_to_resource_id(tex_id)
         else:
@@ -308,6 +320,74 @@ class Executor:
         if result.OK():
             return full_path
         return ""
+
+    # ------------------------------------------------------------------
+    # Overlay screenshot — highlighted drawcall render (GUI Highlight Drawcall)
+    # ------------------------------------------------------------------
+
+    def _render_overlay_screenshot(self, params: dict, event_id: int, out_path: str) -> str:
+        """Render the screenshot with a DebugOverlay (e.g. Drawcall highlight).
+
+        Mirrors RenderDoc TextureViewer behavior: dim background + magenta
+        drawcall pixels, composited onto the same target. Returns the path
+        to the PNG/JPG written, or "" on failure.
+        """
+        ctrl = self._catalog.controller
+        width = params.get("width") or 512
+        height = params.get("height") or 512
+        filetype = params.get("filetype", "png")
+        overlay_name = params.get("overlay")
+
+        # Resolve overlay enum. ``getattr`` re-raises as AttributeError if the
+        # name ever slips past artifacts._SUPPORTED_OVERLAYS validation.
+        overlay = getattr(rd.DebugOverlay, overlay_name)
+
+        # Resolve the texture to highlight — first color output target.
+        pipe = ctrl.GetPipelineState()
+        targets = pipe.GetOutputTargets()
+        if not targets or targets[0].resource == rd.ResourceId.Null():
+            return ""
+
+        # Build the display configuration.
+        disp = rd.TextureDisplay()
+        disp.resourceId = targets[0].resource
+        disp.overlay = overlay
+
+        output = ctrl.CreateOutput(
+            rd.CreateHeadlessWindowingData(width, height),
+            rd.ReplayOutputType.Texture,
+        )
+
+        try:
+            output.SetTextureDisplay(disp)
+            output.Display()
+            pixels = output.ReadbackOutputTexture()
+        finally:
+            output.Shutdown()
+
+        if not pixels:
+            return ""
+
+        # Driver readback is RGB (3 bytes/pixel): d3d11_outputwindow.cpp
+        # does ``retData.resize(outw.width * outw.height * 3)``; gl/vk/d3d12
+        # match. Same format as _render_mesh_screenshot uses.
+        expected = width * height * 3
+        if len(pixels) != expected:
+            return ""
+
+        ext = ".png" if filetype == "png" else ".jpg"
+        full_path = out_path + ext
+        self._write_rgb_to_image(full_path, pixels, width, height)
+        return full_path
+
+    def _write_rgb_to_image(self, path: str, rgb_data: bytes, width: int, height: int) -> None:
+        """Write raw RGB byte data as an image file."""
+        from PIL import Image
+        img = Image.frombytes("RGB", (width, height), rgb_data)
+        if path.endswith(".jpg"):
+            img.save(path, "JPEG")
+        else:
+            img.save(path, "PNG")
 
     def _render_mesh(self, params: dict, event_id: int, out_path: str) -> str:
         """Extract post-transform vertex data and save as OBJ."""
@@ -516,15 +596,6 @@ class Executor:
 
         output.Shutdown()
         return full_path
-
-    def _write_rgb_to_image(self, path: str, rgb_data: bytes, width: int, height: int) -> None:
-        """Write raw RGB byte data as an image file."""
-        from PIL import Image
-        img = Image.frombytes("RGB", (width, height), rgb_data)
-        if path.endswith(".jpg"):
-            img.save(path, "JPEG")
-        else:
-            img.save(path, "PNG")
 
     # ------------------------------------------------------------------
     # Log — detailed text log of the result row

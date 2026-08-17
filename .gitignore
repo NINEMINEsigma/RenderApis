@@ -50,3 +50,4 @@ plugins-*/
 __pycache__
 venv/
 temp/
+.tasks/

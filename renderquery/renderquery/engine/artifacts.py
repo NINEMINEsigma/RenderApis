@@ -22,6 +22,26 @@ class ArtifactSpec:
         return {"kind": self.kind, **self.params}
 
 
+# Debug overlays supported by the ``overlay=`` argument of :func:`screenshot`.
+# Mirrors the TextureViewer "Overlay" dropdown in RenderDoc GUI (qrenderdoc/Windows/
+# TextureViewer.cpp:655), minus NaN / Clipping (which are display modes, not overlays)
+# and NoOverlay (use ``None`` instead).
+_SUPPORTED_OVERLAYS: frozenset = frozenset({
+    "Drawcall",
+    "Wireframe",
+    "ViewportScissor",
+    "BackfaceCull",
+    "Depth",
+    "Stencil",
+    "ClearBeforeDraw",
+    "ClearBeforePass",
+    "QuadOverdrawDraw",
+    "QuadOverdrawPass",
+    "TriangleSizeDraw",
+    "TriangleSizePass",
+})
+
+
 def screenshot(
     width: int = 0,
     height: int = 0,
@@ -30,6 +50,7 @@ def screenshot(
     mip: int = 0,
     slice: int = 0,
     sample: int = 0,
+    overlay: str | None = None,
 ) -> ArtifactSpec:
     """Describe a screenshot artifact.
 
@@ -37,14 +58,27 @@ def screenshot(
     If ``texture_id`` is provided, captures that specific texture instead.
 
     Args:
-        width:  Target width in pixels. 0 = original size.
-        height: Target height in pixels. 0 = original size.
-        filetype: Output format — "png", "jpg", "tga", "bmp".
+        width:  Target width in pixels. 0 = original size (raw path) or fit to
+                ``width`` when ``overlay`` is set.
+        height: Target height in pixels. 0 = original size (raw path) or fit to
+                ``height`` when ``overlay`` is set.
+        filetype: Output format — "png", "jpg", "tga", "bmp" on the raw path;
+                  only "png" or "jpg" on the overlay path.
         texture_id: ResourceId string for a specific texture, or None for output target.
+                    When set, ``overlay`` is silently ignored (Highlight Drawcall
+                    only applies to the active drawcall's color output).
         mip: Mip level to capture.
         slice: Array slice to capture.
         sample: MSAA sample index.
+        overlay: Optional debug overlay name — e.g. ``"Drawcall"`` highlights
+                 the pixels written by the current drawcall (magenta on a
+                 dimmed background, matching RenderDoc GUI's "Highlight Drawcall").
+                 Must be one of ``_SUPPORTED_OVERLAYS``. ``None`` disables.
     """
+    if overlay is not None and overlay not in _SUPPORTED_OVERLAYS:
+        raise ValueError(
+            f"unknown overlay {overlay!r}; valid options: {sorted(_SUPPORTED_OVERLAYS)}"
+        )
     return ArtifactSpec(
         kind="screenshot",
         params={
@@ -55,6 +89,7 @@ def screenshot(
             "mip": mip,
             "slice": slice,
             "sample": sample,
+            "overlay": overlay,
         },
     )
 

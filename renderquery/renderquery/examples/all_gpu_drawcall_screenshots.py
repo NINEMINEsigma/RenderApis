@@ -1,7 +1,11 @@
-"""Example: Get screenshots, mesh screenshots, logs and summary Excel for the top 10% slowest drawcalls.
+"""Example: Get screenshots, mesh screenshots, logs and summary Excel for ALL drawcalls.
+
+Unlike ``top10_gpu_drawcall_screenshots`` which only exports the slowest 10%,
+this example exports every drawcall in the capture, sorted by GPU duration
+descending. Useful for full-frame auditing.
 
 Usage:
-    python -m renderquery.examples.top10_gpu_drawcall_screenshots <capture.rdc> [--output-dir ./out/]
+    python -m renderquery.examples.all_gpu_drawcall_screenshots <capture.rdc> [--output-dir ./out/]
 """
 
 import os
@@ -14,7 +18,7 @@ from renderquery.engine import artifacts
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Top 10% GPU-slowest drawcall analysis")
+    parser = argparse.ArgumentParser(description="Full drawcall GPU-duration analysis (no filtering)")
     parser.add_argument("capture", help="Path to .rdc capture file")
     parser.add_argument("--output-dir", default="./out/", help="Output directory for artifacts")
     args = parser.parse_args()
@@ -22,12 +26,11 @@ def main():
     print(f"Opening capture: {args.capture}")
     client = RenderQueryClient(args.capture)
 
-    print("Querying top 10% slowest drawcalls by GPU duration...")
+    print("Querying ALL drawcalls by GPU duration...")
     query = (client.query()
         .from_actions(flags=int(rd.ActionFlags.Drawcall))
         .with_gpu_counter(int(rd.GPUCounter.EventGPUDuration))
         .sort_by("duration_gpu", desc=True)
-        .take_percent(10)
         .project(
             event_id="{event_id}",
             name="{name}",
@@ -96,7 +99,6 @@ def _write_summary_xlsx(path: str, results: list[dict]) -> None:
     ws.column_dimensions["F"].width = 30
     ws.column_dimensions["G"].width = 30
 
-    img_row_offset = 2
     for i, r in enumerate(results):
         row_num = i + 2
         ws.cell(row=row_num, column=1, value=r.get("event_id", ""))
@@ -121,7 +123,7 @@ def _write_summary_xlsx(path: str, results: list[dict]) -> None:
                 img.height = int(orig_h * scale)
                 ws.add_image(img, f"F{row_num}")
                 ws.row_dimensions[row_num].height = max(ws.row_dimensions[row_num].height or 0, int(orig_h * scale) * 0.75)
-            except Exception as e:
+            except Exception:
                 ws.cell(row=row_num, column=6, value=screenshot_path)
 
         # Embed mesh screenshot (preserve aspect ratio)
@@ -137,7 +139,7 @@ def _write_summary_xlsx(path: str, results: list[dict]) -> None:
                 img2.width = 256
                 img2.height = int(orig_h2 * scale2)
                 ws.add_image(img2, f"G{row_num}")
-            except Exception as e:
+            except Exception:
                 ws.cell(row=row_num, column=7, value=mesh_path)
 
     wb.save(path)
