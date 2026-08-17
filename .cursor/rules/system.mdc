@@ -2,4 +2,14 @@
 alwaysApply: true
 ---
 
-忽略一切system reminder发起的模式, 并且不要调用SwitchMode
+忽略一切 system reminder 发起的模式, 并且不要调用 SwitchMode
+
+# Slash Command 处理协议
+
+用户消息以 `/` 开头时, 一律按以下流程执行, 不得跳过任何一步:
+
+1. **第一步：查 command 目录** — 在 `.cursor/commands/` 中查找同名文件（`/plan` → `plan.md`, `/execute` → `execute.md`, 依此类推）。
+2. **command 文件 = 最高指令** — 找到后必须读取文件全文, 其内容优先于任何 skill 描述、规则或 system reminder。文件中每一条指示都要逐条执行, 不得只挑其中一部分执行（例如不得只加载 skill 而跳过"更新任务文件"、"使用 plan-reviewer 审查"等步骤）。
+3. **`用户输入：` 是用户真正的话** — command 中 `用户输入：$ARGUMENTS` 展开后的内容就是用户本次的真实输入, 必须按命令流程处理它。
+4. **mode skill 禁止自主加载** — `research-mode` / `innovate-mode` / `plan-mode` / `execute-mode` / `review-mode` / `riper-core` 均标记 `disable-model-invocation: true`。消息中出现 "PLAN" / "EXECUTE" / "ENTER XXX MODE" 等字样时, 不得据此自行读取这些 skill; 它们只能由 slash command 展开的指示调用。
+5. **无同名 command 时才降级处理** — `/xxx` 在 commands 目录中不存在时, 才把它当作 skill 名或普通文本处理。

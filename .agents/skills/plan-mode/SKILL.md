@@ -1,6 +1,6 @@
 ---
 name: plan-mode
-description: RIPER-5 协议模式3：创建详尽的技术规范。制定精确的文件路径、函数签名、更改规范和架构概述，最终输出编号实施清单。当用户进入 PLAN 模式、说"ENTER PLAN MODE"、需要技术规范、实施计划、更改方案或详细清单时使用。
+description: RIPER-5 协议模式3：创建详尽的技术规范。制定精确的文件路径、函数签名、更改规范和架构概述，最终输出编号实施清单。仅由 /plan slash command 展开后调用，模型禁止自主加载。
 disable-model-invocation: true
 ---
 

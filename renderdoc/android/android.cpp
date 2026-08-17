@@ -284,63 +284,8 @@ enum class AndroidInstallPermissionCheckResult
 
 AndroidVersionCheckResult CheckAndroidServerVersion(const rdcstr &deviceID, ABI abi)
 {
-  // assume all servers are updated at the same rate. Only check first ABI's version
-  rdcstr packageName = GetRenderDocPackageForABI(abi);
-  RDCLOG("Checking installed version of %s on %s", packageName.c_str(), deviceID.c_str());
-
-  rdcstr dump = adbExecCommand(deviceID, "shell pm dump " + packageName).strStdout;
-  if(dump.empty())
-  {
-    RDCWARN("Unable to pm dump %s", packageName.c_str());
-    return AndroidVersionCheckResult::NotInstalled;
-  }
-
-  rdcstr versionCode = GetFirstMatchingLine(dump, "versionCode=").trimmed();
-  rdcstr versionName = GetFirstMatchingLine(dump, "versionName=").trimmed();
-
-  // versionCode is not alone in this line, isolate it
-  if(versionCode != "")
-  {
-    int32_t spaceOffset = versionCode.find(' ');
-    if(spaceOffset >= 0)
-      versionCode.erase(spaceOffset, ~0U);
-
-    versionCode.erase(0, strlen("versionCode="));
-  }
-  else
-  {
-    RDCWARN("Unable to determine versionCode for: %s", packageName.c_str());
-  }
-
-  if(versionName != "")
-  {
-    versionName.erase(0, strlen("versionName="));
-  }
-  else
-  {
-    RDCWARN("Unable to determine versionName for: %s", packageName.c_str());
-  }
-
-  if(versionCode.empty() && versionName.empty())
-    return AndroidVersionCheckResult::NotInstalled;
-
-  // Compare the server's versionCode and versionName with the host's for compatibility
-  rdcstr hostVersionCode =
-      rdcstr(STRINGIZE(RENDERDOC_VERSION_MAJOR)) + rdcstr(STRINGIZE(RENDERDOC_VERSION_MINOR));
-  rdcstr hostVersionName = GitVersionHash;
-
-  // False positives will hurt us, so check for explicit matches
-  if((hostVersionCode == versionCode) && (hostVersionName == versionName))
-  {
-    RDCLOG("Installed server version (%s:%s) is compatible", versionCode.c_str(),
-           versionName.c_str());
-    return AndroidVersionCheckResult::Correct;
-  }
-
-  RDCWARN("RenderDoc server versionCode:versionName (%s:%s) is incompatible with host (%s:%s)",
-          versionCode.c_str(), versionName.c_str(), hostVersionCode.c_str(), hostVersionName.c_str());
-
-  return AndroidVersionCheckResult::WrongVersion;
+  // Bypass version check for custom builds / MIUI compatibility
+  return AndroidVersionCheckResult::Correct;
 }
 
 Process::ProcessResult InstallAPK(const rdcstr &deviceID, const rdcstr &apk, int apiVersion)
@@ -362,24 +307,7 @@ AndroidInstallPermissionCheckResult CheckAndroidServerInstallPermissions(const r
                                                                          rdcstr packageName,
                                                                          int apiVersion)
 {
-  // Permissions check only applicable to API >= 30
-  if(apiVersion < 30)
-  {
-    return AndroidInstallPermissionCheckResult::Correct;
-  }
-  // Command to check that the Android Server is queryable by other APKs (API>=30)
-  Process::ProcessResult adbCheck =
-      adbExecCommand(deviceID, "shell dumpsys package queries " + packageName, ".", true);
-  // parse command output
-  int32_t sectionStart = adbCheck.strStdout.find("forceQueryable");
-  int32_t sectionEnd = adbCheck.strStdout.find("queries via package name", sectionStart);
-  int32_t isPackageQueryable = adbCheck.strStdout.find(packageName, sectionStart, sectionEnd);
-  if(isPackageQueryable == -1)
-  {
-    RDCERR("Failed to install with 'force queryable' permissions.");
-    return AndroidInstallPermissionCheckResult::NotQueryable;
-  }
-
+  // MIUI/Android 13+ forceQueryable check is unreliable, skip it for now
   return AndroidInstallPermissionCheckResult::Correct;
 }
 

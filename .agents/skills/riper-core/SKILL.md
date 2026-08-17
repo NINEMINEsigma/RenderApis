@@ -1,6 +1,6 @@
 ---
 name: riper-core
-description: RIPER-5 协议的公共骨架，包含背景介绍、模式声明要求、核心思维原则、关键协议指南、代码处理指南、模式转换信号、任务文件模板、占位符定义、跨平台兼容性和性能期望。被五个 mode skill（research-mode / innovate-mode / plan-mode / execute-mode / review-mode）引用。当需要了解 RIPER-5 协议的整体框架、公共规则或跨阶段约束时使用。
+description: RIPER-5 协议的公共骨架，包含背景介绍、模式声明要求、核心思维原则、关键协议指南、代码处理指南、模式转换信号、任务文件模板、占位符定义、跨平台兼容性和性能期望。仅作为五个 mode skill（research-mode / innovate-mode / plan-mode / execute-mode / review-mode）的共享依赖，或由对应 slash command 展开后引用。模型禁止自主加载。
 disable-model-invocation: true
 ---
 

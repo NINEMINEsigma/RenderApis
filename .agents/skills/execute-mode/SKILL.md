@@ -1,6 +1,6 @@
 ---
 name: execute-mode
-description: RIPER-5 协议模式4：准确实施规划内容。严格按编号清单执行、更新任务进度、请求用户确认。当用户进入 EXECUTE 模式、说"ENTER EXECUTE MODE"、需要实施代码更改、按计划执行或推进编码时使用。只有在明确的"ENTER EXECUTE MODE"命令后才能进入。
+description: RIPER-5 协议模式4：准确实施规划内容。严格按编号清单执行、更新任务进度、请求用户确认。仅由 /execute slash command 展开后调用，模型禁止自主加载。
 disable-model-invocation: true
 ---
 

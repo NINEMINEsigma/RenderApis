@@ -1,6 +1,6 @@
 ---
 name: innovate-mode
-description: RIPER-5 协议模式2：头脑风暴潜在方法。讨论多种解决方案想法、评估优势劣势、探索架构替代方案。当用户进入 INNOVATE 模式、说"ENTER INNOVATE MODE"、需要头脑风暴、方案评估、架构探索或多方案对比时使用。
+description: RIPER-5 协议模式2：头脑风暴潜在方法。讨论多种解决方案想法、评估优势劣势、探索架构替代方案。仅由显式模式转换信号（ENTER INNOVATE MODE）调用，模型禁止自主加载。
 disable-model-invocation: true
 ---
 

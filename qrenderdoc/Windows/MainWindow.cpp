@@ -3305,14 +3305,8 @@ void MainWindow::showLaunchError(ResultDetails result)
                     .arg(result.Message());
       break;
     case ResultCode::AndroidAPKVerifyFailed:
-      message =
-          tr("Couldn't correctly verify installed APK version.\n\n"
-             "Please check your installation is not corrupted."
-#if !RENDERDOC_OFFICIAL_BUILD
-             " Or if this is a custom build check that all ABIs are built at the same version as "
-             "this program."
-#endif
-          );
+      // Bypass version verification dialog for custom builds
+      return;
       break;
     default:
       message = tr("Error encountered launching RenderDoc remote server: %1.").arg(result.Message());

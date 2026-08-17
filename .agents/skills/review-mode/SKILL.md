@@ -1,6 +1,6 @@
 ---
 name: review-mode
-description: RIPER-5 协议模式5：无情验证实施与计划的符合程度。逐行比较计划与实施、标记任何偏差、执行最终提交准备。当用户进入 REVIEW 模式、说"ENTER REVIEW MODE"、需要验证实施准确性、审查代码与计划偏差或完成最终审查时使用。
+description: RIPER-5 协议模式5：无情验证实施与计划的符合程度。逐行比较计划与实施、标记任何偏差、执行最终提交准备。仅由显式模式转换信号（ENTER REVIEW MODE）调用，模型禁止自主加载。
 disable-model-invocation: true
 ---
 
