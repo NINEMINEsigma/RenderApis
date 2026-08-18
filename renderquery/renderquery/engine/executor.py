@@ -260,9 +260,9 @@ class Executor:
         if kind == "screenshot":
             return self._render_screenshot(params, event_id, out_path)
         elif kind == "mesh":
-            return self._render_mesh(params, event_id, out_path)
+            return self._render_mesh(params, event_id, out_path, row)
         elif kind == "mesh_screenshot":
-            return self._render_mesh_screenshot(params, event_id, out_path)
+            return self._render_mesh_screenshot(params, event_id, out_path, row)
         elif kind == "texture_data":
             return self._render_texture_data(params, event_id, out_path)
         elif kind == "shader_disasm":
@@ -398,10 +398,12 @@ class Executor:
         else:
             img.save(path, "PNG")
 
-    def _render_mesh(self, params: dict, event_id: int, out_path: str) -> str:
-        """Extract post-transform vertex data and save as OBJ."""
+    def _render_mesh(self, params: dict, event_id: int, out_path: str,
+                     row: dict | None = None) -> str:
+        """Extract vertex data and save as OBJ."""
         ctrl = self._catalog.controller
         stage_map = {
+            "PreVS": rd.MeshDataStage.VSIn,
             "PostVS": rd.MeshDataStage.VSOut,
             "PostGS": rd.MeshDataStage.GSOut,
             "PostMesh": rd.MeshDataStage.MeshOut,
@@ -411,14 +413,17 @@ class Executor:
         instance = params.get("instance", 0)
         view = params.get("view", 0)
 
-        mesh = ctrl.GetPostVSData(instance, view, stage)
+        if stage == rd.MeshDataStage.VSIn:
+            mesh = self._get_vsin_mesh_format(row or {})
+        else:
+            mesh = ctrl.GetPostVSData(instance, view, stage)
         if mesh.numIndices == 0:
             return ""
 
         fmt = params.get("format", "obj")
         full_path = out_path + f".{fmt}"
 
-        # Fetch vertex data from the post-VS buffer
+        # Fetch vertex data from the vertex buffer
         vert_data = ctrl.GetBufferData(mesh.vertexResourceId, mesh.vertexByteOffset, 0)
         if not vert_data:
             return ""
@@ -438,10 +443,14 @@ class Executor:
         if stride <= 0:
             return
 
-        # Position is always the first attribute in post-VS data
-        # with 4 components (x, y, z, w) at 4-byte float
+        # Position is at offset 0 in the returned data — vertexByteOffset
+        # already points to the position attribute's start within the buffer.
         pos_offset = 0
-        pos_size = 12  # x, y, z = 3 floats = 12 bytes
+        fmt = mesh.format
+        if fmt.compType == rd.CompType.Float and fmt.compByteWidth == 4:
+            pos_size = min(fmt.compCount, 3) * 4
+        else:
+            pos_size = 12
 
         num_verts = len(vert_data) // stride
 
@@ -552,12 +561,14 @@ class Executor:
     # Mesh screenshot — render mesh via ReplayOutput with MeshDisplay
     # ------------------------------------------------------------------
 
-    def _render_mesh_screenshot(self, params: dict, event_id: int, out_path: str) -> str:
+    def _render_mesh_screenshot(self, params: dict, event_id: int, out_path: str,
+                               row: dict | None = None) -> str:
         """Render the drawcall's mesh with wireframe highlight via headless ReplayOutput."""
         ctrl = self._catalog.controller
         width = params.get("width", 512)
         height = params.get("height", 512)
         stage_map = {
+            "PreVS": rd.MeshDataStage.VSIn,
             "PostVS": rd.MeshDataStage.VSOut,
             "PostGS": rd.MeshDataStage.GSOut,
             "PostMesh": rd.MeshDataStage.MeshOut,
@@ -568,8 +579,11 @@ class Executor:
         view = params.get("view", 0)
         wireframe = params.get("wireframe", True)
 
-        # Get post-VS mesh data (must be called after SetFrameEvent)
-        mesh_fmt = ctrl.GetPostVSData(instance, view, stage)
+        # Get mesh data (must be called after SetFrameEvent)
+        if stage == rd.MeshDataStage.VSIn:
+            mesh_fmt = self._get_vsin_mesh_format(row or {})
+        else:
+            mesh_fmt = ctrl.GetPostVSData(instance, view, stage)
         if mesh_fmt.numIndices == 0:
             return ""
 
@@ -605,6 +619,67 @@ class Executor:
 
         output.Shutdown()
         return full_path
+
+    def _get_vsin_mesh_format(self, row: dict) -> rd.MeshFormat:
+        """Build a MeshFormat for VS In (pre-vertex-shader) position attribute.
+
+        Mirrors RenderDoc's BufferViewer VSIn path: reads pipeline state to
+        find vertex input attributes, selects the most likely position element,
+        and constructs a MeshFormat pointing into the bound vertex buffer.
+        """
+        ctrl = self._catalog.controller
+        pipe = ctrl.GetPipelineState()
+        ib = pipe.GetIBuffer()
+        vbs = pipe.GetVBuffers()
+        attrs = pipe.GetVertexInputs()
+
+        if not attrs:
+            return rd.MeshFormat()
+
+        # Select position attribute: prefer name match, then float3+, else first
+        pos_idx = -1
+        for i, attr in enumerate(attrs):
+            name = (attr.name or "").upper()
+            if "POSITION" in name or name == "POS" or "SV_POSITION" in name:
+                pos_idx = i
+                break
+        if pos_idx < 0:
+            for i, attr in enumerate(attrs):
+                if not attr.perInstance and attr.format.compCount >= 3:
+                    pos_idx = i
+                    break
+        if pos_idx < 0:
+            pos_idx = 0
+
+        attr = attrs[pos_idx]
+        flags = int(row.get("flags", 0))
+        is_indexed = bool(flags & int(rd.ActionFlags.Indexed))
+
+        mesh_fmt = rd.MeshFormat()
+        mesh_fmt.indexResourceId = ib.resourceId if is_indexed else rd.ResourceId.Null()
+        mesh_fmt.indexByteOffset = ib.byteOffset
+        mesh_fmt.indexByteStride = ib.byteStride
+        mesh_fmt.baseVertex = int(row.get("base_vertex", 0))
+        mesh_fmt.indexOffset = int(row.get("index_offset", 0))
+        mesh_fmt.numIndices = int(row.get("num_indices", 0))
+        mesh_fmt.topology = pipe.GetPrimitiveTopology()
+
+        if attr.vertexBuffer < len(vbs) and not attr.perInstance:
+            vb = vbs[attr.vertexBuffer]
+            mesh_fmt.vertexResourceId = vb.resourceId
+            mesh_fmt.vertexByteStride = vb.byteStride
+            mesh_fmt.vertexByteOffset = (
+                vb.byteOffset
+                + attr.byteOffset
+                + int(row.get("vertex_offset", 0)) * vb.byteStride
+            )
+        else:
+            mesh_fmt.vertexResourceId = rd.ResourceId.Null()
+            mesh_fmt.vertexByteStride = 0
+            mesh_fmt.vertexByteOffset = 0
+
+        mesh_fmt.format = attr.format
+        return mesh_fmt
 
     # ------------------------------------------------------------------
     # Log — detailed text log of the result row

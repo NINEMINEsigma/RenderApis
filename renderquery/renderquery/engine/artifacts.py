@@ -100,10 +100,12 @@ def mesh(
     view: int = 0,
     format: str = "obj",
 ) -> ArtifactSpec:
-    """Describe a mesh artifact — post-transform vertex data exported to a file.
+    """Describe a mesh artifact — vertex data exported to a file.
 
     Args:
-        stage: Which geometry stage to extract — "PostVS", "PostGS", "PostMesh", "TaskOut".
+        stage: Which geometry stage to extract — "PreVS", "PostVS", "PostGS",
+               "PostMesh", "TaskOut".
+               "PreVS" extracts the raw vertex-input buffers (before vertex shader).
         instance: Instance index for instanced draws.
         view: Multiview view index.
         format: Output format — "obj" or "glb".
@@ -203,7 +205,9 @@ def mesh_screenshot(
     Args:
         width: Output image width in pixels.
         height: Output image height in pixels.
-        stage: Which geometry stage — "PostVS", "PostGS", "PostMesh", "TaskOut".
+        stage: Which geometry stage — "PreVS", "PostVS", "PostGS", "PostMesh",
+               "TaskOut". "PreVS" renders the raw vertex-input buffers (before
+               vertex shader), i.e. the input geometry to the pipeline.
         instance: Instance index for instanced draws.
         view: Multiview view index.
         wireframe: True to render wireframe overlay.

@@ -36,8 +36,8 @@ def main():
             num_indices="{num_indices}",
             num_instances="{num_instances}",
             screenshot=artifacts.screenshot(width=512, height=512, overlay="Drawcall"),
-            mesh_screenshot=artifacts.mesh_screenshot(width=512, height=512),
-            mesh=artifacts.mesh(stage="PostVS"),
+            mesh_screenshot=artifacts.mesh_screenshot(width=512, height=512, stage="PreVS"),
+            mesh=artifacts.mesh(stage="PreVS"),
             log=artifacts.log(filetype="txt"),
         )
         .to_file(args.output_dir))
