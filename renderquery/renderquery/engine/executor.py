@@ -100,7 +100,13 @@ class Executor:
             counter_map = self._catalog.fetch_gpu_counters(counter)
             field_name = self._counter_field_name(counter)
             for row in rows:
-                row[field_name] = counter_map.get(row["event_id"])
+                if row["event_id"] in counter_map:
+                    row[field_name] = counter_map[row["event_id"]]
+                else:
+                    # Rows without counter samples (e.g. markers) keep the
+                    # catalog's derived value (rolled-up range duration).
+                    catalog_row = self._catalog.get_event(row["event_id"])
+                    row[field_name] = catalog_row.get(field_name) if catalog_row else None
             return rows
 
         elif op == "filter":
@@ -227,12 +233,15 @@ class Executor:
             for proj in art_projs:
                 tasks.append((eid, proj, row))
 
-        # Group by eventId to minimize SetFrameEvent calls
+        # Group by replay target to minimize SetFrameEvent calls. Rows may pin
+        # artifacts to a different event than their own (e.g. marker rows replay
+        # to their last draw descendant); file names still use the row's event_id.
         current_eid = None
         for eid, proj, row in tasks:
-            if eid != current_eid:
-                self._catalog.controller.SetFrameEvent(eid, True)
-                current_eid = eid
+            replay_eid = row.get("replay_event_id") or eid
+            if replay_eid != current_eid:
+                self._catalog.controller.SetFrameEvent(replay_eid, True)
+                current_eid = replay_eid
 
             path = self._render_artifact(proj, eid, row, output_dir)
             row[proj.name] = path

@@ -159,7 +159,107 @@ class Catalog:
                 "length": buf.length,
             })
 
+        self._enrich_hierarchy()
         self._loaded = True
+
+    def _enrich_hierarchy(self) -> None:
+        """Derive hierarchy fields for all event rows.
+
+        Adds to every row:
+          depth: ancestor marker count (+1 for marker rows themselves).
+          stage_path: '/'-joined marker names — marker rows include their own
+                      name, other rows only their enclosing markers ("" if none).
+        Marker rows additionally get:
+          replay_event_id: max eventId of drawcall-flagged descendants, or
+                           None when the marker range contains no draws.
+        """
+        marker_flags = int(rd.ActionFlags.PushMarker) | int(rd.ActionFlags.SetMarker)
+        drawcall_flag = int(rd.ActionFlags.Drawcall)
+        by_id = self._event_by_id
+
+        def seg(row: dict) -> str:
+            return row["name"] or f"event_{row['event_id']}"
+
+        for row in self._events:
+            ancestors = []
+            pid = row["parent_id"]
+            while pid is not None:
+                parent = by_id.get(pid)
+                if parent is None:
+                    break
+                if parent["flags"] & marker_flags:
+                    ancestors.append(parent)
+                pid = parent["parent_id"]
+            ancestors.reverse()
+
+            is_marker = bool(row["flags"] & marker_flags)
+            row["depth"] = len(ancestors) + (1 if is_marker else 0)
+            parts = [seg(m) for m in ancestors]
+            if is_marker:
+                parts.append(seg(row))
+                row["replay_event_id"] = None
+            row["stage_path"] = "/".join(parts)
+
+        # Propagate event ids up the marker ancestor chain. Events are in
+        # preorder so ids ascend; the last write wins with the max id.
+        for row in self._events:
+            is_draw = bool(row["flags"] & drawcall_flag)
+            pid = row["parent_id"]
+            while pid is not None:
+                parent = by_id.get(pid)
+                if parent is None:
+                    break
+                if "replay_event_id" in parent:
+                    parent["_last_eid"] = row["event_id"]
+                    if is_draw:
+                        parent["replay_event_id"] = row["event_id"]
+                pid = parent["parent_id"]
+
+        for row in self._events:
+            if "replay_event_id" in row:
+                last = row.pop("_last_eid", None)
+                row["event_range"] = (
+                    f"{row['event_id']}-{last}" if last is not None else str(row["event_id"])
+                )
+
+        self._rollup_marker_durations()
+
+    def _rollup_marker_durations(self) -> None:
+        """Sum drawcall durations into their marker ancestors.
+
+        GPU counters are only reported for real events, so marker rows get
+        their range durations by rolling up descendant drawcalls (matching the
+        Event Browser's aggregated marker durations). Idempotent; called after
+        hierarchy enrichment and after every GPU-counter backfill.
+        """
+        if not self._event_by_id:
+            return
+        marker_flags = int(rd.ActionFlags.PushMarker) | int(rd.ActionFlags.SetMarker)
+        drawcall_flag = int(rd.ActionFlags.Drawcall)
+        acc: dict[int, list] = {}  # marker event_id -> [gpu_sum, cpu_sum, gpu_seen]
+        for row in self._events:
+            if not (row["flags"] & drawcall_flag):
+                continue
+            gpu = row.get("duration_gpu")
+            cpu = row.get("duration_cpu") or 0.0
+            pid = row["parent_id"]
+            while pid is not None:
+                parent = self._event_by_id.get(pid)
+                if parent is None:
+                    break
+                if parent["flags"] & marker_flags:
+                    a = acc.setdefault(parent["event_id"], [0.0, 0.0, False])
+                    a[1] += cpu
+                    if gpu is not None:
+                        a[0] += gpu
+                        a[2] = True
+                pid = parent["parent_id"]
+        for row in self._events:
+            a = acc.get(row["event_id"])
+            if a is not None:
+                row["duration_cpu"] = a[1]
+                if a[2]:
+                    row["duration_gpu"] = a[0]
 
     def _collect_event_chunks(self, action, sdfile, out: dict) -> None:
         """Recursively map eventId → {name, duration_cpu} from chunks."""
@@ -263,6 +363,7 @@ class Catalog:
             if eid in self._event_by_id:
                 self._event_by_id[eid]["duration_gpu"] = val
 
+        self._rollup_marker_durations()
         return mapped
 
     def get_usage(self, resource_id: str) -> list[dict]:
@@ -310,6 +411,7 @@ class Catalog:
             for eid, val in self._gpu_counters[counter].items():
                 if eid in self._event_by_id:
                     self._event_by_id[eid]["duration_gpu"] = val
+        self._rollup_marker_durations()
         self._usage_cache = data.get("usage_cache", {})
 
 
