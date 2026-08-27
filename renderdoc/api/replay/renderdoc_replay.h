@@ -1183,6 +1183,18 @@ next after that.
 )");
   virtual void TriggerCapture(uint32_t numFrames) = 0;
 
+  DOCUMENT(R"(Arm or disarm a one-shot capture that triggers when the frame rate drops below a
+threshold.
+
+While armed, the first frame whose frame time exceeds ``1000.0 / fps`` milliseconds causes the
+next frame to be captured, exactly as if triggered by :meth:`TriggerCapture` with one frame. After
+firing once the threshold is automatically disarmed and will not trigger again until re-armed.
+
+:param float fps: The threshold in frames per second. ``0`` or negative values disarm any armed
+threshold. Requires target-control protocol version 10 or newer; older targets ignore this call.
+)");
+  virtual void CaptureFPSThreshold(float fps) = 0;
+
   DOCUMENT(R"(Queue up a capture to happen on a particular frame number. When this frame is about to
 begin a capture is begun, and it ends when this frame number ends.
 

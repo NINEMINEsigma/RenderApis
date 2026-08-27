@@ -124,6 +124,8 @@ LiveCapture::LiveCapture(ICaptureContext &ctx, const QString &hostname, const QS
   ui->triggerImmediateCapture->setEnabled(false);
   ui->queueCap->setEnabled(false);
   ui->cycleActiveWindow->setEnabled(false);
+  ui->captureFPS->setEnabled(false);
+  ui->fpsThreshold->setEnabled(false);
 
   ui->target->setText(QString());
 
@@ -307,6 +309,26 @@ void LiveCapture::on_triggerDelayedCapture_clicked()
     countdownTimer.start();
     ui->triggerDelayedCapture->setEnabled(false);
     ui->triggerDelayedCapture->setText(tr("Triggering in %1s").arg(m_CaptureCounter));
+  }
+}
+
+void LiveCapture::on_captureFPS_toggled(bool checked)
+{
+  if(checked)
+  {
+    m_ThresholdCaptureFPS = (float)ui->fpsThreshold->value();
+    m_ThresholdCapture.release();
+    m_ThresholdArmed = true;
+    ui->fpsThreshold->setEnabled(false);
+    ui->captureFPS->setText(tr("Armed: capture next frame below %1 fps (click to cancel)").arg(m_ThresholdCaptureFPS));
+  }
+  else
+  {
+    m_ThresholdCaptureFPS = 0.0f;
+    m_ThresholdCapture.release();
+    m_ThresholdArmed = false;
+    ui->fpsThreshold->setEnabled(true);
+    ui->captureFPS->setText(tr("Capture Next Frame Below FPS:"));
   }
 }
 
@@ -1137,6 +1159,19 @@ void LiveCapture::captureCopied(uint32_t ID, const QString &localPath)
 
 void LiveCapture::captureAdded(const QString &name, const NewCaptureData &newCapture)
 {
+  // One-shot FPS-threshold capture: a new capture arriving while armed means the threshold
+  // fired on the target (which has already disarmed itself), so reset the armed UI state.
+  // NOTE: if the capture came from the capture hotkey or another path instead, the target's
+  // threshold actually stays armed - this desync only produces one extra capture later and is
+  // an accepted trade-off (documented in the task file).
+  if(m_ThresholdArmed)
+  {
+    m_ThresholdArmed = false;
+    ui->captureFPS->setChecked(false);
+    ui->fpsThreshold->setEnabled(true);
+    ui->captureFPS->setText(tr("Capture Next Frame Below FPS:"));
+  }
+
   Capture *cap = new Capture();
 
   cap->name = name;
@@ -1309,6 +1344,11 @@ void LiveCapture::connectionThreadEntry()
       m_CaptureNumFrames = 1;
     }
 
+    if(m_ThresholdCapture.tryAcquire())
+    {
+      conn->CaptureFPSThreshold((float)m_ThresholdCaptureFPS);
+    }
+
     if(m_QueueCapture.tryAcquire())
     {
       conn->QueueCapture((uint32_t)m_QueueCaptureFrameNum, (uint32_t)m_CaptureNumFrames);
@@ -1374,6 +1414,8 @@ void LiveCapture::connectionThreadEntry()
           ui->triggerImmediateCapture->setEnabled(true);
           ui->triggerDelayedCapture->setEnabled(true);
           ui->queueCap->setEnabled(true);
+          ui->captureFPS->setEnabled(true);
+          ui->fpsThreshold->setEnabled(true);
         }
 
         updateAPIStatus();
@@ -1460,6 +1502,14 @@ void LiveCapture::connectionThreadEntry()
     ui->connectionIcon->setPixmap(Pixmaps::disconnect(ui->connectionIcon));
 
     ui->numFrames->setEnabled(false);
+    ui->fpsThreshold->setEnabled(false);
+    ui->captureFPS->setEnabled(false);
+    if(m_ThresholdArmed)
+    {
+      m_ThresholdArmed = false;
+      ui->captureFPS->setChecked(false);
+      ui->captureFPS->setText(tr("Capture Next Frame Below FPS:"));
+    }
     ui->captureDelay->setEnabled(false);
     ui->captureFrame->setEnabled(false);
     ui->triggerDelayedCapture->setEnabled(false);

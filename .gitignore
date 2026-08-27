@@ -12,6 +12,7 @@ build-*/
 /compile_commands.json
 .cache/
 /dist/
+/x64/
 /package/
 util/buildscripts/support
 Resources/*.png
@@ -51,3 +52,4 @@ __pycache__
 venv/
 temp/
 .tasks/
+.logs/

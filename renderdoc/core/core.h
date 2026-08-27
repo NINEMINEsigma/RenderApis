@@ -34,6 +34,7 @@
 #include "api/replay/control_types.h"
 #include "api/replay/stringise.h"
 #include "common/timing.h"
+#include "core_std_atomic.h"
 #include "os/os_specific.h"
 
 DECLARE_REFLECTION_ENUM(RENDERDOC_AnnotationType);
@@ -608,6 +609,9 @@ public:
   bool IsActiveWindow(DeviceOwnedWindow devWnd);
   void GetActiveWindow(DeviceOwnedWindow &devWnd);
   void TriggerCapture(uint32_t numFrames) { m_Cap = numFrames; }
+  // FPS > 0 arms a one-shot capture that fires when a frame drops below the given FPS.
+  // FPS <= 0 disarms it. Idempotent; re-arming overwrites the previous threshold.
+  void ArmThresholdCaptureFPS(float fps);
   uint32_t GetOverlayBits() { return m_Overlay; }
   void MaskOverlayBits(uint32_t And, uint32_t Or) { m_Overlay = (m_Overlay & And) | Or; }
   void QueueCapture(uint32_t frameNumber);
@@ -677,6 +681,10 @@ private:
   bool m_Replay;
 
   uint32_t m_Cap;
+
+  // One-shot FPS-threshold capture. 0 means disarmed. Written from the target control thread,
+  // read on present threads in ShouldTriggerCapture, so it must be atomic.
+  std::atomic<float> m_CaptureFPSThreshold = 0.0f;
 
   bool m_PrevFocus = false;
   bool m_PrevCap = false;

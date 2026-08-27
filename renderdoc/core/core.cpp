@@ -1420,6 +1420,11 @@ rdcstr RenderDoc::GetOverlayText(RDCDriver driver, DeviceOwnedWindow devWnd, uin
           overlayText += "No remote access connection.";
       }
 
+      const float armedFPS = m_CaptureFPSThreshold.load();
+      if(armedFPS > 0.0f)
+        overlayText += StringFormat::Fmt(" Armed: capturing when below %.1f fps.",
+                                         (double)armedFPS);
+
       if(overlay & eRENDERDOC_Overlay_CaptureList)
       {
         overlayText += StringFormat::Fmt(" %d Captures saved.\n", (uint32_t)m_Captures.size());
@@ -1481,6 +1486,21 @@ void RenderDoc::QueueCapture(uint32_t frameNumber)
     m_QueuedFrameCaptures.insert(it - m_QueuedFrameCaptures.begin(), frameNumber);
 }
 
+void RenderDoc::ArmThresholdCaptureFPS(float fps)
+{
+  if(fps > 0.0f)
+  {
+    m_CaptureFPSThreshold = fps;
+    RDCLOG("Armed one-shot capture: will capture when frame rate drops below %.1f FPS",
+           (double)fps);
+  }
+  else
+  {
+    m_CaptureFPSThreshold = 0.0f;
+    RDCLOG("Disarmed FPS-threshold capture");
+  }
+}
+
 bool RenderDoc::ShouldTriggerCapture(uint32_t frameNumber)
 {
   bool ret = m_Cap > 0;
@@ -1505,6 +1525,27 @@ bool RenderDoc::ShouldTriggerCapture(uint32_t frameNumber)
     {
       // not hit this yet, keep it around
       m_QueuedFrameCaptures.push_back(*it);
+    }
+  }
+
+  // if we aren't already capturing, check the armed one-shot FPS threshold: when the last
+  // completed frame took longer than the threshold, capture the upcoming frame. The exchange
+  // disarms it (one-shot) and ensures two windows presenting in the same frame don't double-fire.
+  if(!ret)
+  {
+    const float fpsThreshold = m_CaptureFPSThreshold.load();
+    if(fpsThreshold > 0.0f)
+    {
+      const double lastFrameMs = m_FrameTimer.GetLastFrameTime();
+      const double thresholdMs = 1000.0 / (double)fpsThreshold;
+
+      if(lastFrameMs > 0.0 && lastFrameMs > thresholdMs &&
+         m_CaptureFPSThreshold.exchange(0.0f) == fpsThreshold)
+      {
+        RDCLOG("Frame time %.2f ms exceeded threshold %.2f ms (%.1f FPS), triggering capture",
+               lastFrameMs, thresholdMs, (double)fpsThreshold);
+        ret = true;
+      }
     }
   }
 

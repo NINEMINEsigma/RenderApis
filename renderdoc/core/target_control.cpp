@@ -33,7 +33,7 @@
 #include "serialise/serialiser.h"
 #include "strings/string_utils.h"
 
-static const uint32_t TargetControlProtocolVersion = 9;
+static const uint32_t TargetControlProtocolVersion = 10;
 
 static bool IsProtocolVersionSupported(const uint32_t protocolVersion)
 {
@@ -63,6 +63,10 @@ static bool IsProtocolVersionSupported(const uint32_t protocolVersion)
 
   // 8 -> 9 add capture titles
   if(protocolVersion == 8)
+    return true;
+
+  // 9 -> 10 add one-shot FPS-threshold capture
+  if(protocolVersion == 9)
     return true;
 
   if(protocolVersion == TargetControlProtocolVersion)
@@ -411,6 +415,15 @@ void RenderDoc::TargetControlClientThread(uint32_t version, Network::Socket *cli
       {
         RenderDoc::Inst().CycleActiveWindow();
       }
+      else if(type == ePacket_CaptureFPSThreshold)
+      {
+        float fps = 0.0f;
+
+        READ_DATA_SCOPE();
+        SERIALISE_ELEMENT(fps);
+
+        RenderDoc::Inst().ArmThresholdCaptureFPS(fps);
+      }
 
       reader.EndChunk();
 
@@ -665,6 +678,21 @@ public:
     SCOPED_SERIALISE_CHUNK(ePacket_TriggerCapture);
 
     SERIALISE_ELEMENT(numFrames);
+
+    if(ser.IsErrored())
+      SAFE_DELETE(m_Socket);
+  }
+
+  void CaptureFPSThreshold(float fps)
+  {
+    // new in protocol version 10 - older targets don't understand this packet
+    if(m_Version < 10)
+      return;
+
+    WRITE_DATA_SCOPE();
+    SCOPED_SERIALISE_CHUNK(ePacket_CaptureFPSThreshold);
+
+    SERIALISE_ELEMENT(fps);
 
     if(ser.IsErrored())
       SAFE_DELETE(m_Socket);

@@ -75,6 +75,7 @@ private slots:
   void on_triggerImmediateCapture_clicked();
   void on_cycleActiveWindow_clicked();
   void on_triggerDelayedCapture_clicked();
+  void on_captureFPS_toggled(bool checked);
   void on_queueCap_clicked();
   void on_previewSplit_splitterMoved(int pos, int index);
   void on_apiIcon_clicked(QMouseEvent *event);
@@ -179,6 +180,9 @@ private:
 
   uint32_t m_CopyCaptureID = ~0U;
   QString m_CopyCaptureLocalPath;
+  QSemaphore m_ThresholdCapture;
+  float m_ThresholdCaptureFPS = 0.0f;
+  bool m_ThresholdArmed = false;
   QMutex m_DeleteCapturesLock;
   QVector<uint32_t> m_DeleteCaptures;
 

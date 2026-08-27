@@ -225,6 +225,38 @@
            </property>
           </widget>
          </item>
+         <item row="2" column="0">
+          <widget class="QPushButton" name="captureFPS">
+           <property name="toolTip">
+            <string>Arm a one-shot capture: when the frame rate first drops below the given FPS, the NEXT frame is captured once. Click again to cancel.</string>
+           </property>
+           <property name="text">
+            <string>Capture Next Frame Below FPS:</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QDoubleSpinBox" name="fpsThreshold">
+           <property name="suffix">
+            <string> fps</string>
+           </property>
+           <property name="decimals">
+            <number>1</number>
+           </property>
+           <property name="minimum">
+            <double>0.100000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>100000.000000000000000</double>
+           </property>
+           <property name="value">
+            <double>30.000000000000000</double>
+           </property>
+          </widget>
+         </item>
          <item row="3" column="0">
           <widget class="QPushButton" name="triggerDelayedCapture">
            <property name="text">

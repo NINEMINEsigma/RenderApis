@@ -55,13 +55,14 @@ public:
   void InitTimers()
   {
     m_HighPrecisionTimer.Restart();
-    m_TotalTime = m_AvgFrametime = m_MinFrametime = m_MaxFrametime = 0.0;
+    m_TotalTime = m_AvgFrametime = m_MinFrametime = m_MaxFrametime = m_LastFrametime = 0.0;
   }
 
   void UpdateTimers()
   {
     m_FrameTimes.push_back(m_HighPrecisionTimer.GetMilliseconds());
     m_TotalTime += m_FrameTimes.back();
+    m_LastFrametime = m_FrameTimes.back();
     m_HighPrecisionTimer.Restart();
 
     // update every second
@@ -91,6 +92,9 @@ public:
   double GetAvgFrameTime() const { return m_AvgFrametime; }
   double GetMinFrameTime() const { return m_MinFrametime; }
   double GetMaxFrameTime() const { return m_MaxFrametime; }
+  // The duration in ms of the most recently completed frame. Both writer (UpdateTimers) and
+  // readers run on the present thread, so this does not need to be atomic.
+  double GetLastFrameTime() const { return m_LastFrametime; }
 private:
   PerformanceTimer m_HighPrecisionTimer;
   rdcarray<double> m_FrameTimes;
@@ -98,6 +102,7 @@ private:
   double m_AvgFrametime;
   double m_MinFrametime;
   double m_MaxFrametime;
+  double m_LastFrametime;
 };
 
 class ScopedTimer
